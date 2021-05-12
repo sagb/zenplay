@@ -1,0 +1,15 @@
+[Unit]
+Description=zenplay
+After=network.target
+After=redis
+
+[Service]
+Type=simple
+
+ExecStart=/usr/local/bin/zenplay
+
+Restart=never
+#RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
