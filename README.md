@@ -10,24 +10,24 @@
 
 1. Make a [hardware](zenplay.kicad/export.pdf). Each button will choose a genre (see [settings.h](settings.h)).
 
-1. apt install \  
+2. apt install \  
   libhiredis-dev \  
   librhash-dev \  
   libmpv-dev \  
   libgpiod-dev \  
 
-2. apt install redis \  
+3. apt install redis \  
   && service redis start  
 
-3. git clone https://github.com/sagb/zenplay.git \  
+4. git clone https://github.com/sagb/zenplay.git \  
   && cd zenplay  
 
-4. Edit settings.h
+5. Edit settings.h
 
-5. make \  
+6. make \  
   && make install  
 
-6. zenindex  _(index all songs once)_
+7. zenindex  _(index all songs once)_
 
-7. zenplay
+8. zenplay
 
