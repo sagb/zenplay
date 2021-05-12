@@ -22,6 +22,7 @@ typedef struct {
     struct gpiod_chip* chip;
     struct gpiod_line* button[N_GENRES];
     struct gpiod_line* led[N_GENRES];
+    struct timeval last_press[N_GENRES];
 } gpio_t;
 #define GPIO_CONSUMER   "zenplay"
 
@@ -352,15 +353,51 @@ unsigned int msTime()
 
 char pollButtonsAndConsumeTime (gpio_t* gpio)
 {
+    const suseconds_t maxwait = 10000; // 10 ms
+    const int ignore_repetitive_press = 1500; // 1.5 s
+    fd_set rfds;
+    struct timeval tv;
+    int ms_since_last_press;
     int n, v;
 
+    gettimeofday (&tv, NULL);
     for (n=0; n<N_GENRES; n++) {
         v = gpiod_line_get_value (gpio->button[n]);
         if (v < 0)
             die ("gpiod_line_get_value failed for button '%s'\n",
                     genre_str[n]);
-        printf ("button '%s': %d\n", genre_str[n], v);
+        else if (v == 1) {
+            // button pressed
+            if (gpio->last_press[n].tv_sec == 0) {
+                // first detection
+                gpio->last_press[n].tv_sec = tv.tv_sec;
+                gpio->last_press[n].tv_usec = tv.tv_usec;
+                // immediate return: no sleep, no other buttons
+                return ('0' + n);
+            } else {
+                // already pressed, maybe ignore?
+                ms_since_last_press = 
+                    (tv.tv_sec - gpio->last_press[n].tv_sec) * 1000 +
+                    (tv.tv_usec - gpio->last_press[n].tv_usec) / 1000;
+                if (ms_since_last_press < ignore_repetitive_press)
+                    continue;
+                else {
+                    // setup new grace period and return
+                    gpio->last_press[n].tv_sec = tv.tv_sec;
+                    gpio->last_press[n].tv_usec = tv.tv_usec;
+                    return ('0' + n);
+                }
+            }
+        } else if (v == 0) {
+            // discard grace period
+            if (gpio->last_press[n].tv_sec != 0)
+                gpio->last_press[n].tv_sec = gpio->last_press[n].tv_usec = 0;
+        }
     }
+    FD_ZERO(&rfds);
+    tv.tv_sec = 0;
+    tv.tv_usec = maxwait;
+    select(0, &rfds, NULL, NULL, &tv); // just sleep for 10 ms
     return '\0';
 }  // pollButtonsAndConsumeTime()
 
@@ -519,6 +556,18 @@ void closeGpio (gpio_t *gpio)
 }  // closeGpio()
 
 
+void ledOn (gpio_t* gpio, unsigned int genre)
+{
+    int n, v;
+
+    for (n=0; n<N_GENRES; n++) {
+        v = (n == genre) ? 1 : 0;
+        gpiod_line_set_value (gpio->led[n], v);
+        //if (ret < 0) {  perror(
+    }
+}  // ledOn
+
+
 int main (int argc, char **argv) {
 
     redisContext *c;
@@ -552,6 +601,7 @@ int main (int argc, char **argv) {
         // or previous genre by default
         chooseNext (c, genre,
                song, sizeof(song), &is_already_listened);
+        ledOn (&gpio, genre);
         btn = playSong (c, m, &gpio, song, &listen_duration);
         recordListenedSongToDB (c, genre, song,
                listen_duration, is_already_listened);
