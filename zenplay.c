@@ -578,12 +578,25 @@ int main (int argc, char **argv) {
     unsigned int genre;
     bool is_already_listened;
     char btn = '\0';
+    unsigned int snum;
+
+    m = initMpv();
+
+    if (argc > 1) {
+        // special mode: just play given songs
+        for (snum = 1; snum < argc; snum++) {
+            printf ("playing %s\n", argv[snum]);
+            btn = playPath (m, NULL, argv[snum], &listen_duration);
+            printf ("listen_duration=%u\n", listen_duration);
+        }
+        mpv_terminate_destroy (m);
+        return 0;
+    }
 
     srandom (time (NULL));
     if (chdir (recordings_top_dir) == -1)
         die ("can't cd to %s\n", recordings_top_dir);
     c = initRedis();
-    m = initMpv();
     initGpio (&gpio);
     for (genre = 0; genre < N_GENRES; genre++) {
         loadScalarsFromDB (c, genre);

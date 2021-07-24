@@ -29,5 +29,7 @@
 
 7. zenindex  _(index all songs once)_
 
-8. zenplay
+8. zenplay _(play random file and learn listen duration)_  
+   _-or-_  
+   zenplay file1 file2 ... _(debug mode, database not used)_
 
