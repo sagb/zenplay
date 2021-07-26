@@ -2,7 +2,7 @@
 
 // redis database contains pathes relative to this directory.
 // second level directories must be genre_str (see below).
-const char* recordings_top_dir = "./music";
+const char* recordings_top_dir = "/music";
 
 // each genre has own:
 //   distinct control button,
