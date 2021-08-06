@@ -581,12 +581,13 @@ int main (int argc, char **argv) {
     unsigned int snum;
 
     m = initMpv();
+    initGpio (&gpio);
 
     if (argc > 1) {
         // special mode: just play given songs
         for (snum = 1; snum < argc; snum++) {
             printf ("playing %s\n", argv[snum]);
-            btn = playPath (m, NULL, argv[snum], &listen_duration);
+            btn = playPath (m, &gpio, argv[snum], &listen_duration);
             printf ("listen_duration=%u\n", listen_duration);
         }
         mpv_terminate_destroy (m);
@@ -597,7 +598,6 @@ int main (int argc, char **argv) {
     if (chdir (recordings_top_dir) == -1)
         die ("can't cd to %s\n", recordings_top_dir);
     c = initRedis();
-    initGpio (&gpio);
     for (genre = 0; genre < N_GENRES; genre++) {
         loadScalarsFromDB (c, genre);
         set_total_listen_duration_at_program_start (genre,
