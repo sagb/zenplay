@@ -231,6 +231,48 @@ int recordListenedSongToDB (redisContext *c, int genre,
 } // recordListenSongToDB
 
 
+bool recentlyListened (redisContext *c, int genre, char* song)
+{
+    redisReply *reply;
+    int n, m;
+    const char* P = "recentlyListened";
+
+    printf ("%s: testing song %s\n", P, song);
+    reply = redisCommand (c,"XRANGE listen:%s %u +",
+            genre_str[genre],
+            total_listen_duration_at_program_start[genre]);
+
+    if (!reply)
+        die ("%s: %s\n", P, c->errstr);
+    if (reply->type != REDIS_REPLY_ARRAY)
+        die ("%s: top reply is not array\n", P);
+    for (n = 0; n < reply->elements; n++) {
+        if (reply->element[n]->type != REDIS_REPLY_ARRAY)
+            die ("%s: 2nd level is not array\n", P);
+        if (reply->element[n]->elements < 2)
+            die ("%s: 2nd level has less than 2 elements\n", P);
+        if (reply->element[n]->element[1]->type != REDIS_REPLY_ARRAY)
+            die ("%s: 3rd level is not array\n", P);
+        for (m = 0; m < reply->element[n]->element[1]->elements-1; m++) {
+            if (strcmp (reply->element[n]->element[1]->element[m]->str,
+                        "song") == 0) {
+                // next element is song id
+                if (strcmp (song,
+                        reply->element[n]->element[1]->element[m+1]->str) == 0) {
+                    freeReplyObject(reply);
+                    printf ("%s: found at position %d from %d\n",
+                            P, n, reply->elements);
+                    return true;
+                    }
+            }
+        }
+    }
+    freeReplyObject(reply);
+    printf ("%s: not found\n", P);
+    return false;
+} // recentlyListened
+
+
 void chooseFromListened (redisContext *c, int genre, unsigned int r,
         char* song, int songsize)
 {
@@ -304,29 +346,27 @@ void chooseNext (redisContext *c, int genre,
     int try;
 
     // generate random pointer r to timeline
-    // while trying 5 times to suppress
+    // while trying 10 times to suppress
     // songs played during current program run
-    for (try=0; try<=5; try++) {
-        // 64-bit proportion
-        td64 = total_duration[genre];
-        ra64 = random();
-        rm64 = 0x80000000;
-        r64 = td64 * ra64 / rm64;
-        r = r64;
-        printf ("%s: select r=%u from total_duration[%s]=%u\n",
-                P, r, genre_str[genre], total_duration[genre]);
-        if (r < total_listen_duration[genre] 
-         && r > total_listen_duration_at_program_start[genre]) {
-            printf ("too new, supressed\n");
-            continue; // next try
-        }
-        break;
-    }
+    try = 0;
+nextTry:
+    // 64-bit proportion
+    td64 = total_duration[genre];
+    ra64 = random();
+    rm64 = 0x80000000;
+    r64 = td64 * ra64 / rm64;
+    r = r64;
+    printf ("%s: select r=%u from total_duration[%s]=%u\n",
+            P, r, genre_str[genre], total_duration[genre]);
     // here we have r
 
     if (r < total_listen_duration[genre]) {
         *is_already_listened = true;
         chooseFromListened (c, genre, r, song, songsize);
+        if (recentlyListened (c, genre, song) && try < 10) {
+            try++;
+            goto nextTry;
+        }
     }
     else {
         *is_already_listened = false;
