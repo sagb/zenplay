@@ -27,7 +27,10 @@
 6. make \  
   && make install  
 
-7. zenindex  _(index all songs once)_
+7. zenindex  _(index all songs once)_  
+   _-or-_  
+   zenindex [-p] dir1 dir2 ...  
+   -p: purge redis tables before index
 
 8. zenplay _(play random file and learn listen duration)_  
    _-or-_  

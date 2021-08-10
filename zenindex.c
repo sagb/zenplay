@@ -174,7 +174,7 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
     if (! add_to_unlisten)
         return 1;
 
-    printf ("unlisten:%s\n", genre);
+    //printf ("unlisten:%s\n", genre);
     reply = redisCommand (c,"LPUSH unlisten:%s %s", genre, hexhash);
     if (!reply)
         return 1;
@@ -246,21 +246,62 @@ redisContext* initRedis()
 }   // initRedis
 
 
+void purgeDb(redisContext * c) {
+    int n;
+    redisReply *reply;
+
+    for (n = 0; n < N_GENRES; n++) {
+        printf ("DEL unlisten:%s ", genre_str[n]);
+        reply = redisCommand (c,"DEL unlisten:%s", genre_str[n]);
+        if (reply) {
+            printf ("OK\n");
+            freeReplyObject(reply);
+        }
+        printf ("DEL listen:%s ", genre_str[n]);
+        reply = redisCommand (c,"DEL listen:%s", genre_str[n]);
+        if (reply) {
+            printf ("OK\n");
+            freeReplyObject(reply);
+        }
+    }
+    printf ("DEL path2hash ");
+    reply = redisCommand (c,"DEL path2hash");
+    if (reply) {
+        printf ("OK\n");
+        freeReplyObject(reply);
+    }
+    printf ("DEL hash2path ");
+    reply = redisCommand (c,"DEL hash2path");
+    if (reply) {
+        printf ("OK\n");
+        freeReplyObject(reply);
+    }
+}   // purgeDb
+
+
 int main (int argc, char **argv) {
 
     redisContext *c;
     int u;
     char **tops;
+    int arg_consumed = 0;
+
+    c = initRedis();
 
     if (argc > 1) {
-        tops = argv+1;
+        if (strcmp (argv[1], "-p") == 0) {
+            purgeDb (c);
+            arg_consumed++;
+        }
+    }
+    if (argc - arg_consumed > 1) {
+        tops = argv + 1 + arg_consumed;
     } else {
         chdir (recordings_top_dir);
         tops = (char**)genre_str;
     }
 
     rhash_library_init();
-    c = initRedis();
     u = updateDBFromFiles (c, tops);
     redisFree(c);
 
