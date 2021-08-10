@@ -121,6 +121,14 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
             strcasecmp (ext, "wav") != 0 && 
             strcasecmp (ext, "webm") != 0 && 
             strcasecmp (ext, "m4a") != 0 && 
+            strcasecmp (ext, "mkv") != 0 && 
+            strcasecmp (ext, "mp4") != 0 && 
+            strcasecmp (ext, "avi") != 0 && 
+            strcasecmp (ext, "mov") != 0 && 
+            strcasecmp (ext, "wma") != 0 && 
+            strcasecmp (ext, "mp2") != 0 && 
+            strcasecmp (ext, "mpg") != 0 && 
+            strcasecmp (ext, "mpeg") != 0 && 
             strcasecmp (ext, "flac") != 0 
        ) {
         //printf ("skip: %s\n", pe->fts_name);
