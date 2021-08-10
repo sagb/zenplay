@@ -503,20 +503,14 @@ char playSong (redisContext *c, mpv_handle *m, gpio_t* gpio, char* song,
 mpv_handle* initMpv()
 {
     mpv_handle *ctx;
-    int mc;
+    int mc; //int val;
    
     ctx = mpv_create();
     if (!ctx)
         die ("failed creating mpv context\n");
-    // Enable default key bindings, so the user can actually interact with
-    // the player (and e.g. close the window).
-    /*
-    mc = mpv_set_option_string(ctx, "input-default-bindings", "yes");
-    mpv_set_option_string(ctx, "input-vo-keyboard", "yes");
-    int val = 1;
-    mc = mpv_set_option(ctx, "osc", MPV_FORMAT_FLAG, &val);
-    */
-    // Done setting up options.
+    mc = mpv_set_option_string(ctx, "video", "no");
+    //mpv_set_option_string(ctx, "input-vo-keyboard", "yes");
+    //val = 1; mc = mpv_set_option(ctx, "osc", MPV_FORMAT_FLAG, &val);
     mc = mpv_initialize(ctx);
     if (mc < 0)
         die ("mpv_initialize\n");
@@ -581,7 +575,9 @@ int main (int argc, char **argv) {
     unsigned int snum;
 
     m = initMpv();
+#ifndef USE_KEYBOARD_INSTEAD_OF_GPIO
     initGpio (&gpio);
+#endif
 
     if (argc > 1) {
         // special mode: just play given songs
