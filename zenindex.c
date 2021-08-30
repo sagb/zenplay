@@ -129,6 +129,7 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
             strcasecmp (ext, "mp2") != 0 && 
             strcasecmp (ext, "mpg") != 0 && 
             strcasecmp (ext, "mpeg") != 0 && 
+            strcasecmp (ext, "opus") != 0 && 
             strcasecmp (ext, "flac") != 0 
        ) {
         //printf ("skip: %s\n", pe->fts_name);
