@@ -167,15 +167,17 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
         return 1;
     }
 
+    printf ("cmd: LPOS unlisten:%s %s\n", genre, hexhash);
     reply = redisCommand (c,"LPOS unlisten:%s %s", genre, hexhash);
     if (!reply)
         return 1;
     add_to_unlisten = (reply->type == REDIS_REPLY_NIL);
+    printf ("rep-type: %d, NIL=%d, add_to_unlisten=%d\n", reply->type, REDIS_REPLY_NIL, add_to_unlisten);
     freeReplyObject(reply);
     if (! add_to_unlisten)
         return 1;
 
-    //printf ("unlisten:%s\n", genre);
+    printf ("unlisten:%s\n", genre);
     reply = redisCommand (c,"LPUSH unlisten:%s %s", genre, hexhash);
     if (!reply)
         return 1;
