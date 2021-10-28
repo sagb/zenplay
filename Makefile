@@ -15,5 +15,5 @@ zenplay: zenplay.o
 
 install: zenindex zenplay zenplay.service
 	install zenindex zenplay /usr/local/bin/
-	install zenplay.service /etc/systemd/system/
+	cp -v zenplay.service /etc/systemd/system/
 
