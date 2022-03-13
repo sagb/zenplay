@@ -343,6 +343,7 @@ void chooseNext (redisContext *c, int genre,
     redisReply *reply;
     unsigned int r; // random pointer to duration
     uint64_t td64, ra64, rm64, r64;
+    uint32_t td32, ra32;
     int try;
 
     // generate random pointer r to timeline
@@ -351,13 +352,14 @@ void chooseNext (redisContext *c, int genre,
     try = 0;
 nextTry:
     // 64-bit proportion
-    td64 = total_duration[genre];
-    ra64 = random();
+    td32 = total_duration[genre];
+    ra32 = (uint32_t)random();
     rm64 = 0x80000000;
-    r64 = td64 * ra64 / rm64;
+    r64 = (uint64_t)td32 * (uint64_t)ra32 / rm64;
     r = r64;
-    printf ("%s: select r=%u from total_duration[%s]=%u\n",
-            P, r, genre_str[genre], total_duration[genre]);
+    printf ("%s: select r=%u from total_duration[%s]=%u (%f\%)\n",
+            P, r, genre_str[genre], total_duration[genre],
+            ((double)r64 / (double)(total_duration[genre]) * (double)100.0));
     // here we have r
 
     if (r < total_listen_duration[genre]) {

@@ -15,8 +15,8 @@ const char* recordings_top_dir = "/music";
 #define DEFAULT_GENRE  1  // depressive
 
 const char* genre_str[] = {
-    "paranoid",
-    "depressive",
+    "red",
+    "blue",
     NULL
 };
 const char *chipname = "gpiochip0";
