@@ -357,9 +357,12 @@ nextTry:
     rm64 = 0x80000000;
     r64 = (uint64_t)td32 * (uint64_t)ra32 / rm64;
     r = r64;
+    if (td32 == 0) {
+        td32 = 1;
+    }
     printf ("%s: select r=%u from total_duration[%s]=%u (%f\%)\n",
-            P, r, genre_str[genre], total_duration[genre],
-            ((double)r64 / (double)(total_duration[genre]) * (double)100.0));
+            P, r, genre_str[genre], td32,
+            ((double)r64 / (double)td32 * (double)100.0));
     // here we have r
 
     if (r < total_listen_duration[genre]) {
