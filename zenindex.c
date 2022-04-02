@@ -95,9 +95,9 @@ char* genreFromPath (char* path, char* buf, int buf_size)
 
 
 // return:
-// 0: not added
-// 1: added to main hash
-// 2: added to main hash and unlisten list
+// 0: not added or added to 'all' set only
+// 1: added to 'all' set, main hash
+// 2: added to 'all' set, main hash and unlisten list
 int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
 {
     char *ext;
@@ -136,6 +136,11 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
         return 0;
     }
 
+    if (genreFromPath (pe->fts_accpath, genre, genre_size) == NULL) {
+        printf ("can't guess genre of %s\n", pe->fts_accpath);
+        return 0;
+    }
+
     reply = redisCommand (c,"HEXISTS path2hash %s", pe->fts_accpath);
     if (!reply)
         return 0;
@@ -152,6 +157,10 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
         return 0;
     }
 
+    reply = redisCommand (c,"SADD all:%s %s", genre, hexhash);
+    freeReplyObject(reply);
+    // ignore result
+
     printf ("add: %s\n", pe->fts_name);
     reply = redisCommand (c,"HSET path2hash %s %s",
          pe->fts_accpath, hexhash); //pe->fts_statp->st_size);
@@ -161,11 +170,6 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
         return 0;
     freeReplyObject(reply);
     freeReplyObject(reply2);
-
-    if (genreFromPath (pe->fts_accpath, genre, genre_size) == NULL) {
-        printf ("can't guess genre of %s\n", pe->fts_accpath);
-        return 1;
-    }
 
     reply = redisCommand (c,"LPOS unlisten:%s %s", genre, hexhash);
     if (!reply)
@@ -179,6 +183,8 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
     reply = redisCommand (c,"LPUSH unlisten:%s %s", genre, hexhash);
     if (!reply)
         return 1;
+    freeReplyObject(reply);
+
     return 2;
 }  // updateDBFromSingleFile
 
@@ -260,6 +266,12 @@ void purgeDb(redisContext * c) {
         }
         printf ("DEL listen:%s ", genre_str[n]);
         reply = redisCommand (c,"DEL listen:%s", genre_str[n]);
+        if (reply) {
+            printf ("OK\n");
+            freeReplyObject(reply);
+        }
+        printf ("DEL all:%s ", genre_str[n]);
+        reply = redisCommand (c,"DEL all:%s", genre_str[n]);
         if (reply) {
             printf ("OK\n");
             freeReplyObject(reply);

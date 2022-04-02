@@ -3,7 +3,9 @@
 
 1. Minimal set of controls: only (two) GPIO buttons to choose genre of song.
 
-2. The more often the user listens to the song, the more often it is played.
+2. `popular_mode` constant in settings.h selects one of the following modes:
+* 0: Random
+* 1: The more often the user listens to the song, the more often it is played
 
 
 ## Install

@@ -225,6 +225,8 @@ int recordListenedSongToDB (redisContext *c, int genre,
         freeReplyObject(reply);
         // keep local vars in sync with redis
         decrement_total_unlisten_count (genre, 1);
+    } else {
+        printf ("NOT remove %s from unlisten:%s - already listened\n", songhash, genre_str[genre]);
     }
 
     return 1;
@@ -336,10 +338,42 @@ void chooseFromUnlistened (redisContext *c, int genre, unsigned int ru,
 
 // returns:
 // song, is_already_listened
-void chooseNext (redisContext *c, int genre,
+void chooseNextRandom (redisContext *c, int genre,
         char* song, int songsize, bool* is_already_listened)
 {
-    const char* P = "chooseNext";
+    const char* P = "chooseNextRandom";
+    redisReply *reply;
+    int n_try = 0;
+
+    do {
+        printf ("%s: executing 'SRANDMEMBER all:%s'\n", P, genre_str[genre]);
+        reply = redisCommand (c,"SRANDMEMBER all:%s",
+                genre_str[genre]);
+        if (! (reply->type == REDIS_REPLY_STRING))
+            die ("%s: srandmember: wrong type: %u\n", P, reply->type);
+        if (reply->len < 1)
+            die ("%s: srandmember: len<1: %d\n", P, reply->len);
+        printf ("srandmember ret '%s' len %d songsize %d\n", reply->str, reply->len, songsize);
+        strncpy (song, reply->str, songsize-1);
+        freeReplyObject(reply);
+        n_try++;
+    } while (recentlyListened (c, genre, song) && n_try < 10);
+
+    // is it listened?
+    reply = redisCommand (c,"LPOS unlisten:%s %s",
+            genre_str[genre], song);
+    printf ("%s: is song unlistened? rep type %d (INTEGER %d), val %d\n", P, reply->type, REDIS_REPLY_INTEGER, reply->integer);
+    *is_already_listened = (reply->type != REDIS_REPLY_INTEGER);
+    freeReplyObject(reply);
+} // chooseNextRandom
+
+
+// returns:
+// song, is_already_listened
+void chooseNextPopular (redisContext *c, int genre,
+        char* song, int songsize, bool* is_already_listened)
+{
+    const char* P = "chooseNextPopular";
     redisReply *reply;
     unsigned int r; // random pointer to duration
     uint64_t td64, ra64, rm64, r64;
@@ -377,6 +411,19 @@ nextTry:
         *is_already_listened = false;
         chooseFromUnlistened (c, genre, r - total_listen_duration[genre],
                 song, songsize);
+    }
+} // chooseNextPopular
+
+
+// returns:
+// song, is_already_listened
+void chooseNext (redisContext *c, int genre,
+        char* song, int songsize, bool* is_already_listened)
+{
+    if (popular_mode) {
+        chooseNextPopular (c, genre, song, songsize, is_already_listened);
+    } else {
+        chooseNextRandom (c, genre, song, songsize, is_already_listened);
     }
 } // chooseNext
 

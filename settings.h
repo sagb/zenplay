@@ -12,7 +12,7 @@ const char* recordings_top_dir = "/music";
 // number of genres
 #define N_GENRES    2
 // start with this genre
-#define DEFAULT_GENRE  1  // depressive
+#define DEFAULT_GENRE  1  // depressive/blue
 
 const char* genre_str[] = {
     "red",
@@ -40,5 +40,9 @@ const unsigned int led_gpio[N_GENRES] = {
 
 const char *redis_hostname = "127.0.0.1";
 const int redis_port = 6379;
+
+// 1 - most frequently choosen songs are preferred
+// 0 - random
+const bool popular_mode = 0;
 
 //////////////////// END OF SETTINGS /////////////////////
