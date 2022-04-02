@@ -28,7 +28,6 @@ typedef struct {
 
 // global scalars: the only "state" besides redis.
 // use only functions below to change them.
-
 unsigned int total_listen_duration[N_GENRES];
 unsigned int total_listen_duration_at_program_start[N_GENRES];
 unsigned int total_unlisten_duration[N_GENRES]; // synthetic
@@ -38,6 +37,10 @@ unsigned int total_unlisten_count[N_GENRES];
 unsigned int all_genres_listen_duration;
 unsigned int all_genres_listen_count;
 unsigned int all_genres_average_duration;
+// changed elsewhere
+char** rnd_song[N_GENRES];
+unsigned int n_rnd_songs[N_GENRES];
+unsigned int cur_song[N_GENRES];
 
 // functions to maintain coordinated values of all vars above
 
@@ -194,6 +197,60 @@ int loadScalarsFromDB (redisContext *c, int genre)
 }
 
 
+// for random mode: allocate, load and return for given genre:
+//  array of songs,
+//  number of its elements
+char** loadSongs (redisContext *c, int genre, int *n_songs)
+{
+    redisReply *reply;
+    char* P = "loadSongs";
+    char* srm = "SRANDMEMBER all:%s 4294967295";
+    int n;
+    char* s;
+    char** ret;
+    printf ("%s: executing ", P); printf (srm, genre_str[genre]); printf ("\n");
+    reply = redisCommand (c, srm, genre_str[genre]);
+    if (reply->type != REDIS_REPLY_ARRAY)
+        die ("%s: srnd top reply is not array\n", P);
+    if (reply->elements < 1) {
+        *n_songs = 0;
+        return NULL;
+    }
+    ret = malloc ((reply->elements) * sizeof(char*));  // table of pointers to char[]
+    *n_songs = reply->elements;
+    for (n = 0; n < *n_songs; n++) {
+        if (reply->element[n]->type != REDIS_REPLY_STRING)
+            die ("%s: srnd 2nd level is not string\n", P);
+        s = reply->element[n]->str;
+        ret[n] = malloc (strlen(s)+1);
+        strcpy (ret[n], s);
+        //printf ("load: %s\n", ret[n]);
+    }
+    freeReplyObject(reply);
+    return ret; // and *n_songs
+} // loadSongs
+
+
+// shuffle array of songs
+void shuffleSongs (char** song, int n_songs)
+{
+    char* P = "shuffleSongs";
+    int n, r;
+    char* c;
+    printf ("%s: shuffle %d songs\n", P, n_songs);
+    // Fisher-Yates algorithm
+    for (n = n_songs-1; n > 0; n--) { 
+        r = rand() % (n+1); 
+        c = song[n];
+        song[n] = song[r];
+        song[r] = c;
+    }
+    for (n = 0; n < n_songs; n++) {
+        printf ("%s\n", song[n]);
+    }
+} // shuffleSongs
+
+
 int recordListenedSongToDB (redisContext *c, int genre,
         char* songhash, unsigned int duration, bool already_listened)
 {
@@ -226,7 +283,7 @@ int recordListenedSongToDB (redisContext *c, int genre,
         // keep local vars in sync with redis
         decrement_total_unlisten_count (genre, 1);
     } else {
-        printf ("NOT remove %s from unlisten:%s - already listened\n", songhash, genre_str[genre]);
+        printf ("don't remove %s from unlisten:%s, already removed\n", songhash, genre_str[genre]);
     }
 
     return 1;
@@ -333,7 +390,7 @@ void chooseFromUnlistened (redisContext *c, int genre, unsigned int ru,
     strncpy (song, reply->str, songsize-1);
     song[songsize-1] = '\0';
     freeReplyObject(reply);
-} // chooseFromUnistened
+} // chooseFromUnlistened
 
 
 // returns:
@@ -343,28 +400,25 @@ void chooseNextRandom (redisContext *c, int genre,
 {
     const char* P = "chooseNextRandom";
     redisReply *reply;
-    int n_try = 0;
+    char** slist;
+    unsigned int* n;
 
-    do {
-        printf ("%s: executing 'SRANDMEMBER all:%s'\n", P, genre_str[genre]);
-        reply = redisCommand (c,"SRANDMEMBER all:%s",
-                genre_str[genre]);
-        if (! (reply->type == REDIS_REPLY_STRING))
-            die ("%s: srandmember: wrong type: %u\n", P, reply->type);
-        if (reply->len < 1)
-            die ("%s: srandmember: len<1: %d\n", P, reply->len);
-        printf ("srandmember ret '%s' len %d songsize %d\n", reply->str, reply->len, songsize);
-        strncpy (song, reply->str, songsize-1);
-        freeReplyObject(reply);
-        n_try++;
-    } while (recentlyListened (c, genre, song) && n_try < 10);
-
+    slist = rnd_song[genre];
+    n = &(cur_song[genre]);
+    //printf ("%s: cur_song: %u\n", P, *n);
+    strncpy (song, slist[*n], songsize-1);
+    //printf ("%s: song '%s'\n", P, song);
+    (*n)++;
+    if (*n >= n_rnd_songs[genre]) {
+        *n = 0;
+    }
     // is it listened?
     reply = redisCommand (c,"LPOS unlisten:%s %s",
             genre_str[genre], song);
-    printf ("%s: is song unlistened? rep type %d (INTEGER %d), val %d\n", P, reply->type, REDIS_REPLY_INTEGER, reply->integer);
+    //printf ("%s: is song unlistened? rep type %d (INTEGER %d), val %d\n", P, reply->type, REDIS_REPLY_INTEGER, reply->integer);
     *is_already_listened = (reply->type != REDIS_REPLY_INTEGER);
     freeReplyObject(reply);
+    printf ("%s: '%s', listened %d\n", P, song, *is_already_listened);
 } // chooseNextRandom
 
 
@@ -420,11 +474,13 @@ nextTry:
 void chooseNext (redisContext *c, int genre,
         char* song, int songsize, bool* is_already_listened)
 {
+    char* P = "chooseNext";
     if (popular_mode) {
         chooseNextPopular (c, genre, song, songsize, is_already_listened);
     } else {
         chooseNextRandom (c, genre, song, songsize, is_already_listened);
     }
+    //printf ("%s: ret song '%s'\n", P, song);
 } // chooseNext
 
 
@@ -659,7 +715,7 @@ int main (int argc, char **argv) {
     redisContext *c;
     mpv_handle *m;
     gpio_t gpio;
-    char song[41];
+    char song[SONG_HASH_SIZE];
     unsigned int listen_duration;
     unsigned int genre;
     bool is_already_listened;
@@ -682,7 +738,7 @@ int main (int argc, char **argv) {
         return 0;
     }
 
-    srandom (time (NULL));
+    srandom ((unsigned long)time (NULL));
     if (chdir (recordings_top_dir) == -1)
         die ("can't cd to %s\n", recordings_top_dir);
     c = initRedis();
@@ -690,6 +746,11 @@ int main (int argc, char **argv) {
         loadScalarsFromDB (c, genre);
         set_total_listen_duration_at_program_start (genre,
                 total_listen_duration[genre]);
+        if (popular_mode == 0) { // rnd mode
+            rnd_song[genre] = loadSongs (c, genre, &(n_rnd_songs[genre])); // allocates
+            shuffleSongs (rnd_song[genre], n_rnd_songs[genre]);
+            cur_song[genre] = 0;
+        }
     }
     if (all_genres_average_duration == 0)
         // very first play, just initialized DB

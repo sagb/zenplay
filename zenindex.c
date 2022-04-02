@@ -102,7 +102,7 @@ int updateDBFromSingleFile (redisContext * c, FTSENT * pe)
 {
     char *ext;
     redisReply *reply, *reply2;
-    char hexhash[41];
+    char hexhash[SONG_HASH_SIZE];
     int hr;
     int exist;
     char genre[16]; int genre_size=16;

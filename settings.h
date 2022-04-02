@@ -37,6 +37,8 @@ const unsigned int led_gpio[N_GENRES] = {
 // to index recordings,
 // hash this first number of bytes
 #define SAMPLE_SIZE  0x10000
+// to this hash size
+#define SONG_HASH_SIZE 41
 
 const char *redis_hostname = "127.0.0.1";
 const int redis_port = 6379;
