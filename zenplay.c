@@ -204,7 +204,7 @@ char** loadSongs (redisContext *c, int genre, int *n_songs)
 {
     redisReply *reply;
     char* P = "loadSongs";
-    char* srm = "SRANDMEMBER all:%s 4294967295";
+    char* srm = "SRANDMEMBER all:%s 2147483647";
     int n;
     char* s;
     char** ret;
