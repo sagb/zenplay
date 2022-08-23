@@ -153,6 +153,24 @@ unsigned int tsToMS (char* ts)
 }
 
 
+// return path from song
+char* hash2path (redisContext *c,  char* path, const int pathlen,  char* song)
+{
+    const char* P = "hash2path";
+    redisReply *reply;
+    reply = redisCommand (c,"HGET hash2path %s", song);
+    if (!reply)
+        die ("%s: %s\n", P, c->errstr);
+    if (reply->type != REDIS_REPLY_STRING || reply->len < 1)
+        die ("%s: hash %s isn't converted to path\n", P, song);
+    if (reply->len > pathlen-1)
+        die ("%s: %s: path bigger than %d\n", P, song, pathlen-1);
+    strncpy (path, reply->str, pathlen);
+    path[pathlen-1] = '\0';
+    return path;
+}  // hash2path
+
+
 int loadScalarsFromDB (redisContext *c, int genre)
 {
     redisReply *reply, *reply2;
@@ -251,6 +269,41 @@ void shuffleSongs (char** song, int n_songs)
 } // shuffleSongs
 
 
+redisContext *c_glob;
+
+int cmpSongs (const void* a, const void* b)
+{
+    char* P = "cmpSongs";
+    const int pathlen = 4096;
+    char path_a[4096];
+    char path_b[4096];
+    hash2path (c_glob,  path_a, pathlen,  *((char**)a));
+    hash2path (c_glob,  path_b, pathlen,  *((char**)b));
+    printf ("%s: a: '%s', b: '%s'\n", P, path_a, path_b);
+    return strcmp (path_a, path_b);
+}
+
+
+// order array of songs alphabetically
+void orderSongs (redisContext *c, char** song, int n_songs)
+{
+    char* P = "orderSongs";
+    int n, r;
+    printf ("%s: order %d songs\n", P, n_songs);
+    c_glob = c;  // dirty workaround to pass redis context into cmpSongs
+    qsort (song, n_songs, sizeof(char*), &cmpSongs);
+
+    // for debug only
+    const int pathlen = 4096;
+    char path[4096];
+    printf ("%s: sorted:\n", P);
+    for (n = 0; n < n_songs; n++) {
+        hash2path (c,  path, pathlen,  song[n]);
+        printf ("%s\n", path);
+    }
+} // orderSongs
+
+
 int recordListenedSongToDB (redisContext *c, int genre,
         char* songhash, unsigned int duration, bool already_listened)
 {
@@ -268,7 +321,7 @@ int recordListenedSongToDB (redisContext *c, int genre,
     if (!reply)
         die ("record listened: %s\n", c->errstr);
     if (! (reply->type == REDIS_REPLY_STRING))
-        die ("record listened: wrong type: %u\n", reply->type);
+        die ("record listened (XADD listen:%s %u song %s): wrong type: %u\n", genre_str[genre], newtop, songhash, reply->type);
     if (tsToMS (reply->str) != newtop)
         die ("record listened: unexpected id\n");
     freeReplyObject(reply);
@@ -630,22 +683,13 @@ char playSong (redisContext *c, mpv_handle *m, gpio_t* gpio, char* song,
     const char* P = "playSong";
     char btn;
     char path[4096]; const int pathlen = 4096;
-    redisReply *reply;
 
-    reply = redisCommand (c,"HGET hash2path %s", song);
-    if (!reply)
-        die ("%s: %s\n", P, c->errstr);
-    if (reply->type != REDIS_REPLY_STRING || reply->len < 1)
-        die ("%s: hash %s isn't converted to path\n", P, song);
-    if (reply->len > pathlen-1)
-        die ("%s: %s: path bigger than %d\n", P, song, pathlen-1);
-    strncpy (path, reply->str, pathlen);
-    path[pathlen-1] = '\0';
+    hash2path (c,  path, pathlen,  song);
     printf ("%s: '%s'\n", P, path);
     btn = playPath (m, gpio, path, duration);
     printf ("%s: duration %u\n", P, *duration);
     return btn;
-}
+} // playSong
 
 
 mpv_handle* initMpv()
@@ -748,7 +792,11 @@ int main (int argc, char **argv) {
                 total_listen_duration[genre]);
         if (popular_mode == 0) { // rnd mode
             rnd_song[genre] = loadSongs (c, genre, &(n_rnd_songs[genre])); // allocates
-            shuffleSongs (rnd_song[genre], n_rnd_songs[genre]);
+            if (order_instead_of_shuffle) {
+                orderSongs (c, rnd_song[genre], n_rnd_songs[genre]);
+            } else {
+                shuffleSongs (rnd_song[genre], n_rnd_songs[genre]);
+            }
             cur_song[genre] = 0;
         }
     }

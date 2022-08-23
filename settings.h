@@ -46,5 +46,8 @@ const int redis_port = 6379;
 // 1 - most frequently choosen songs are preferred
 // 0 - random
 const bool popular_mode = 0;
+// 1 - order
+// 0 - shuffle
+const bool order_instead_of_shuffle = 1;
 
 //////////////////// END OF SETTINGS /////////////////////

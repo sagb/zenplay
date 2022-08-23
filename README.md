@@ -7,6 +7,10 @@
 * 0: Random
 * 1: The more often the user listens to the song, the more often it is played
 
+3. `order_instead_of_shuffle` constant selects a submode of `popular_mode=0`:
+* 0: Shuffle
+* 1: Alphabetically order
+
 
 ## Install
 
