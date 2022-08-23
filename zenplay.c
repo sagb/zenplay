@@ -641,6 +641,7 @@ char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
     int mc;
     unsigned int start_ms;
     char btn = '\0';
+    int prevent_zero_duration = 0;
 
     const char *cmd[] = {"loadfile", path, NULL};
     mc = mpv_command (m, cmd);
@@ -667,11 +668,17 @@ char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
             printf("%s: event: %s\n", P, mpv_event_name (event->event_id));
             if (event->event_id == MPV_EVENT_SHUTDOWN)
                 die ("%s: got MPV_EVENT_SHUTDOWN\n", P);
-            if (event->event_id == MPV_EVENT_IDLE)
+            if (event->event_id == MPV_EVENT_IDLE) {
+                // work around XADD failure
+                prevent_zero_duration = 1;
                 break;
+            }
         }
     }
     *duration = msTime() - start_ms;
+    if (*duration == 0 && prevent_zero_duration == 1) {
+        *duration = 1;
+    }
     return btn;
 } // playPath()
 
