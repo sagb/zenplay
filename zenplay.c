@@ -20,9 +20,9 @@
 
 typedef struct {
     struct gpiod_chip* chip;
-    struct gpiod_line* button[N_GENRES];
-    struct gpiod_line* led[N_GENRES];
-    struct timeval last_press[N_GENRES];
+    struct gpiod_line* button[N_BUTTONS];
+    struct gpiod_line* led[N_BUTTONS];
+    struct timeval last_press[N_BUTTONS];
 } gpio_t;
 #define GPIO_CONSUMER   "zenplay"
 
@@ -456,10 +456,14 @@ void chooseNextRandom (redisContext *c, int genre,
     char** slist;
     unsigned int* n;
 
+    // debug
+    //for (int s=0; s<n_rnd_songs[genre]; s++)
+    //    printf ("%s: rnd_songs[genre][%d]: %s\n", P, s, rnd_song[genre][s]);
+
     slist = rnd_song[genre];
     n = &(cur_song[genre]);
     //printf ("%s: cur_song: %u\n", P, *n);
-    strncpy (song, slist[*n], songsize-1);
+    strncpy (song, slist[*n], songsize);
     //printf ("%s: song '%s'\n", P, song);
     (*n)++;
     if (*n >= n_rnd_songs[genre]) {
@@ -549,7 +553,7 @@ unsigned int msTime()
 // poll buttons.
 // return in predictable time 10 ms
 // '\0': timeout
-// '0', '1' etc: genres starting from 0
+// '0', '1' etc: genres starting from 0, or pause,
 // (or whatever entered)
 
 char pollButtonsAndConsumeTime (gpio_t* gpio)
@@ -562,11 +566,10 @@ char pollButtonsAndConsumeTime (gpio_t* gpio)
     int n, v;
 
     gettimeofday (&tv, NULL);
-    for (n=0; n<N_GENRES; n++) {
+    for (n=0; n<N_BUTTONS; n++) {
         v = gpiod_line_get_value (gpio->button[n]);
         if (v < 0)
-            die ("gpiod_line_get_value failed for button '%s'\n",
-                    genre_str[n]);
+            die ("gpiod_line_get_value failed for button %d\n", n);
         else if (v == 1) {
             // button pressed
             if (gpio->last_press[n].tv_sec == 0) {
@@ -633,7 +636,7 @@ char pollButtonsAndConsumeTime_kb()
 
 
 // return:
-//  'p', 'd' or whavever "button" or '\0' (playback finished) as return value,
+//  button char or '\0' (playback finished) as return value,
 //  playback duration on ms at supplied pointer.
 char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
 {
@@ -642,9 +645,10 @@ char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
     unsigned int start_ms;
     char btn = '\0';
     int prevent_zero_duration = 0;
+    const char *load_cmd[] = {"loadfile", path, NULL};
+    int pause = 0;
 
-    const char *cmd[] = {"loadfile", path, NULL};
-    mc = mpv_command (m, cmd);
+    mc = mpv_command (m, load_cmd);
     if (mc < 0)
         die ("%s: loadfile fail\n", P);
 
@@ -659,6 +663,15 @@ char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
             btn = pollButtonsAndConsumeTime_kb();
 #else
             btn = pollButtonsAndConsumeTime (gpio);
+#endif
+#ifdef PAUSE_BUTTON
+            if (btn == '0' + PAUSE_BUTTON) {
+                pause = !pause;
+                mc = mpv_set_property(m, "pause", MPV_FORMAT_FLAG, &pause);
+                if (mc < 0)
+                    die ("%s: (un)pause fail\n", P);
+                continue;
+            }
 #endif
             if (btn != '\0') {
                 printf ("%s: interrupt with '%c'\n", P, btn);
@@ -723,17 +736,17 @@ void initGpio (gpio_t *gpio)
     gpio->chip = gpiod_chip_open_by_name (chipname);
     if (!gpio->chip)
         die ("gpiod_chip_open_by_name\n");
-    for (n=0; n<N_GENRES; n++) {
+    for (n=0; n<N_BUTTONS; n++) {
         gpio->button[n] = gpiod_chip_get_line (gpio->chip, button_gpio[n]);
         if (! gpio->button[n])
-            die ("gpiod_chip_get_line for button '%s'\n", genre_str[n]);
+            die ("gpiod_chip_get_line for button %d\n", n);
         gpio->led[n] = gpiod_chip_get_line (gpio->chip, led_gpio[n]);
         if (! gpio->led[n])
-            die ("gpiod_chip_get_line for led '%s'\n", genre_str[n]);
+            die ("gpiod_chip_get_line for led %n\n", n);
         if (gpiod_line_request_input (gpio->button[n], GPIO_CONSUMER) < 0)
-            die ("gpiod_line_request_input for button '%s'\n", genre_str[n]);
+            die ("gpiod_line_request_input for button %d\n", n);
         if (gpiod_line_request_output (gpio->led[n], GPIO_CONSUMER, 0) < 0)
-            die ("gpiod_line_request_output for led '%s'\n", genre_str[n]);
+            die ("gpiod_line_request_output for led %d\n", n);
     }
 }  // initGpio()
 
@@ -741,7 +754,7 @@ void initGpio (gpio_t *gpio)
 void closeGpio (gpio_t *gpio)
 {
     int n;
-    for (n=0; n<N_GENRES; n++) {
+    for (n=0; n<N_BUTTONS; n++) {
         gpiod_line_release (gpio->button[n]);
         gpiod_line_release (gpio->led[n]);
     }
@@ -753,11 +766,13 @@ void ledOn (gpio_t* gpio, unsigned int genre)
 {
     int n, v;
 
-    for (n=0; n<N_GENRES; n++) {
+#ifndef USE_KEYBOARD_INSTEAD_OF_GPIO
+    for (n=0; n<N_BUTTONS; n++) {
         v = (n == genre) ? 1 : 0;
         gpiod_line_set_value (gpio->led[n], v);
         //if (ret < 0) {  perror(
     }
+#endif
 }  // ledOn
 
 

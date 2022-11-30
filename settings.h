@@ -4,30 +4,30 @@
 // second level directories must be genre_str (see below).
 const char* recordings_top_dir = "/music";
 
-// each genre has own:
-//   distinct control button,
-//   redis tables and statistics,
-//   own directory under recordings_top_dir.
-
-// number of genres
-#define N_GENRES    2
-// start with this genre
-#define DEFAULT_GENRE  1  // depressive/blue
-
-const char* genre_str[] = {
-    "red",
-    "blue",
-    NULL
-};
+#define N_BUTTONS   2
 const char *chipname = "gpiochip0";
-const unsigned int button_gpio[N_GENRES] = {
+const unsigned int button_gpio[N_BUTTONS] = {
     27,
     17
 };
-const unsigned int led_gpio[N_GENRES] = {
+const unsigned int led_gpio[N_BUTTONS] = {
     6,
     5
 };
+
+// each genre has own:
+//   distinct control button (and led), starting from 0
+//   redis tables and statistics,
+//   own directory under recordings_top_dir.
+#define N_GENRES    1
+#define DEFAULT_GENRE  0  // start with this genre: red
+const char* genre_str[] = {
+    "red",
+    NULL
+};
+
+// comment if there is no one
+#define PAUSE_BUTTON   1
 
 // enable debug mode:
 // to change song to first genre, enter "0" at standard input,

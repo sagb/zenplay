@@ -1,7 +1,8 @@
 
 # Very minimal car player for Raspberry Pi
 
-1. Minimal set of controls: only (two) GPIO buttons to choose genre of song.
+1. Minimal set of controls: GPIO buttons to choose genre of song,
+plus optional pause button
 
 2. `popular_mode` constant in settings.h selects one of the following modes:
 * 0: Random
@@ -14,7 +15,8 @@
 
 ## Install
 
-1. Make a [hardware](zenplay.kicad/export.pdf). Each button will choose a genre (see [settings.h](settings.h)).
+1. Make a [hardware](zenplay.kicad/export.pdf). Each button will choose a genre,
+plus an optional button for pause (see [settings.h](settings.h)).
 
 2. apt install \  
   libhiredis-dev \  
