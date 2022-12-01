@@ -23,6 +23,7 @@ typedef struct {
     struct gpiod_line* button[N_BUTTONS];
     struct gpiod_line* led[N_BUTTONS];
     struct timeval last_press[N_BUTTONS];
+    bool led_blink[N_BUTTONS];
 } gpio_t;
 #define GPIO_CONSUMER   "zenplay"
 
@@ -634,11 +635,37 @@ char pollButtonsAndConsumeTime_kb()
     return '\0';
 }
 
+// turn on/off leds in blinking state
+void ledBlinkOnOff(gpio_t *gpio, int val)
+{
+    int n;
+    for (n=0; n<N_BUTTONS; n++) {
+        if (gpio->led_blink[n]) {
+#ifndef USE_KEYBOARD_INSTEAD_OF_GPIO
+            gpiod_line_set_value (gpio->led[n], val);
+#else
+            printf("blink: led %d = %d\n", n, val);
+#endif
+        }
+    }
+}
+
+// trigger blink check
+// phase controlled by 10-ms cycle counter
+void ledCheckBlink(int cycle, gpio_t *gpio)
+{
+    volatile int phase = cycle % 70;
+    if (phase == 0)
+        ledBlinkOnOff(gpio, 0);
+    else if (phase == 60)
+        ledBlinkOnOff(gpio, 1);
+}
+
 
 // return:
 //  button char or '\0' (playback finished) as return value,
 //  playback duration on ms at supplied pointer.
-char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
+char playPath (int genre, mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
 {
     const char* P = "playPath";
     int mc;
@@ -647,6 +674,7 @@ char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
     int prevent_zero_duration = 0;
     const char *load_cmd[] = {"loadfile", path, NULL};
     int pause = 0;
+    int cycle = 0; // 10 ms time consumption counter for led blink
 
     mc = mpv_command (m, load_cmd);
     if (mc < 0)
@@ -658,18 +686,22 @@ char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
     while (1) {
         mpv_event *event = mpv_wait_event (m, 0);
         if (event->event_id == MPV_EVENT_NONE) {
-            // time to handle buttons
+            // time to blink leds and handle buttons
+            ledCheckBlink(cycle, gpio);
 #ifdef USE_KEYBOARD_INSTEAD_OF_GPIO
             btn = pollButtonsAndConsumeTime_kb();
 #else
             btn = pollButtonsAndConsumeTime (gpio);
 #endif
+            cycle++;
 #ifdef PAUSE_BUTTON
             if (btn == '0' + PAUSE_BUTTON) {
                 pause = !pause;
                 mc = mpv_set_property(m, "pause", MPV_FORMAT_FLAG, &pause);
                 if (mc < 0)
                     die ("%s: (un)pause fail\n", P);
+                gpio->led_blink[genre] = pause;
+                cycle = 0; // to turn led off immediately
                 continue;
             }
 #endif
@@ -687,17 +719,27 @@ char playPath (mpv_handle *m, gpio_t* gpio, char* path, unsigned int* duration)
                 break;
             }
         }
-    }
+    } // while(1)
     *duration = msTime() - start_ms;
     if (*duration == 0 && prevent_zero_duration == 1) {
         *duration = 1;
     }
+    // disable possible pause and blink
+    if (mpv_get_property(m, "pause", MPV_FORMAT_FLAG, &pause) >= 0) {
+        if (pause == 1) {
+            pause = 0;
+            mc = mpv_set_property(m, "pause", MPV_FORMAT_FLAG, &pause);
+            if (mc < 0)
+                die ("%s: unpause before return fail\n", P);
+        }
+    }
+    gpio->led_blink[genre] = 0;
     return btn;
 } // playPath()
 
 
 // play and return same things as playPath
-char playSong (redisContext *c, mpv_handle *m, gpio_t* gpio, char* song,
+char playSong (redisContext *c, int genre, mpv_handle *m, gpio_t* gpio, char* song,
         unsigned int* duration)
 {
     const char* P = "playSong";
@@ -706,7 +748,7 @@ char playSong (redisContext *c, mpv_handle *m, gpio_t* gpio, char* song,
 
     hash2path (c,  path, pathlen,  song);
     printf ("%s: '%s'\n", P, path);
-    btn = playPath (m, gpio, path, duration);
+    btn = playPath (genre, m, gpio, path, duration);
     printf ("%s: duration %u\n", P, *duration);
     return btn;
 } // playSong
@@ -733,6 +775,7 @@ mpv_handle* initMpv()
 void initGpio (gpio_t *gpio)
 {
     int n;
+#ifndef USE_KEYBOARD_INSTEAD_OF_GPIO
     gpio->chip = gpiod_chip_open_by_name (chipname);
     if (!gpio->chip)
         die ("gpiod_chip_open_by_name\n");
@@ -747,6 +790,10 @@ void initGpio (gpio_t *gpio)
             die ("gpiod_line_request_input for button %d\n", n);
         if (gpiod_line_request_output (gpio->led[n], GPIO_CONSUMER, 0) < 0)
             die ("gpiod_line_request_output for led %d\n", n);
+    }
+#endif
+    for (n=0; n<N_BUTTONS; n++) {
+        gpio->led_blink[n] = false;
     }
 }  // initGpio()
 
@@ -789,15 +836,13 @@ int main (int argc, char **argv) {
     unsigned int snum;
 
     m = initMpv();
-#ifndef USE_KEYBOARD_INSTEAD_OF_GPIO
     initGpio (&gpio);
-#endif
 
     if (argc > 1) {
         // special mode: just play given songs
         for (snum = 1; snum < argc; snum++) {
             printf ("playing %s\n", argv[snum]);
-            btn = playPath (m, &gpio, argv[snum], &listen_duration);
+            btn = playPath (DEFAULT_GENRE, m, &gpio, argv[snum], &listen_duration);
             printf ("listen_duration=%u\n", listen_duration);
         }
         mpv_terminate_destroy (m);
@@ -834,7 +879,7 @@ int main (int argc, char **argv) {
         chooseNext (c, genre,
                song, sizeof(song), &is_already_listened);
         ledOn (&gpio, genre);
-        btn = playSong (c, m, &gpio, song, &listen_duration);
+        btn = playSong (c, genre, m, &gpio, song, &listen_duration);
         recordListenedSongToDB (c, genre, song,
                listen_duration, is_already_listened);
         printf ("\n");
