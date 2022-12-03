@@ -635,6 +635,21 @@ char pollButtonsAndConsumeTime_kb()
     return '\0';
 }
 
+
+void ledOn (gpio_t* gpio, unsigned int genre)
+{
+    int n, v;
+
+#ifndef USE_KEYBOARD_INSTEAD_OF_GPIO
+    for (n=0; n<N_BUTTONS; n++) {
+        v = (n == genre) ? 1 : 0;
+        gpiod_line_set_value (gpio->led[n], v);
+        //if (ret < 0) {  perror(
+    }
+#endif
+}  // ledOn
+
+
 // turn on/off leds in blinking state
 void ledBlinkOnOff(gpio_t *gpio, int val)
 {
@@ -701,7 +716,10 @@ char playPath (int genre, mpv_handle *m, gpio_t* gpio, char* path, unsigned int*
                 if (mc < 0)
                     die ("%s: (un)pause fail\n", P);
                 gpio->led_blink[genre] = pause;
-                cycle = 0; // to turn led off immediately
+                if (pause)
+                    cycle = 0; // to turn led off immediately
+                else
+                    ledOn(gpio, genre); // turn led on immediately
                 continue;
             }
 #endif
@@ -734,6 +752,7 @@ char playPath (int genre, mpv_handle *m, gpio_t* gpio, char* path, unsigned int*
         }
     }
     gpio->led_blink[genre] = 0;
+    ledOn(gpio, genre);
     return btn;
 } // playPath()
 
@@ -807,20 +826,6 @@ void closeGpio (gpio_t *gpio)
     }
     gpiod_chip_close (gpio->chip);
 }  // closeGpio()
-
-
-void ledOn (gpio_t* gpio, unsigned int genre)
-{
-    int n, v;
-
-#ifndef USE_KEYBOARD_INSTEAD_OF_GPIO
-    for (n=0; n<N_BUTTONS; n++) {
-        v = (n == genre) ? 1 : 0;
-        gpiod_line_set_value (gpio->led[n], v);
-        //if (ret < 0) {  perror(
-    }
-#endif
-}  // ledOn
 
 
 int main (int argc, char **argv) {
